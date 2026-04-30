@@ -1,0 +1,8 @@
+services:
+  mini-dfs:
+    build: .
+    container_name: mini-dfs
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./data:/app/data
