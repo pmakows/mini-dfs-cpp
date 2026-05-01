@@ -1,8 +1,22 @@
+version: "3.9"
+
 services:
-  mini-dfs:
+  metadata:
     build: .
-    container_name: mini-dfs
+    command: ./metadata_service
     ports:
-      - "9001:9001"
+      - "9000:8080"
     volumes:
-      - ./data:/app/data
+      - metadata_data:/data
+
+  storage1:
+    build: .
+    command: ./storage_node
+    ports:
+      - "9001:8080"
+    volumes:
+      - storage1_data:/data
+
+volumes:
+  metadata_data:
+  storage1_data:
