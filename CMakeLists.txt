@@ -8,3 +8,4 @@ include_directories(third_party)
 
 add_executable(storage_node storage_node/main.cpp)
 add_executable(metadata_service metadata_service/main.cpp)
+add_executable(dfs client/dfs.cpp)
