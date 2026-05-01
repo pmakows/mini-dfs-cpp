@@ -3,3 +3,4 @@ data/
 *.log
 test.txt
 out.txt
+big.bin

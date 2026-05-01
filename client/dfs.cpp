@@ -13,6 +13,8 @@ static const int METADATA_PORT = 9000;
 static const std::string STORAGE_HOST = "localhost";
 static const int STORAGE_PORT = 9001;
 
+static const size_t CHUNK_SIZE = 64 * 1024;
+
 std::string read_file(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
@@ -104,12 +106,51 @@ void get_file(const std::string& remote_path, const std::string& local_path) {
     std::cout << "GET OK: " << remote_path << " -> " << local_path << "\n";
 }
 
+std::vector<std::string> split_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("cannot open file");
+    }
+
+    std::vector<std::string> chunks;
+
+    while (!in.eof()) {
+        std::string buffer(CHUNK_SIZE, '\0');
+
+        in.read(buffer.data(), CHUNK_SIZE);
+        size_t bytes_read = in.gcount();
+
+        if (bytes_read > 0) {
+            buffer.resize(bytes_read);
+            chunks.push_back(buffer);
+        }
+    }
+
+    return chunks;
+}
+
 int main(int argc, char** argv) {
     try {
+        // DEBUG MODE: split
+        if (argc == 3 && std::string(argv[1]) == "split") {
+            auto chunks = split_file(argv[2]);
+
+            std::cout << "Chunks: " << chunks.size() << "\n";
+
+            for (size_t i = 0; i < chunks.size(); ++i) {
+                std::cout << "Chunk " << i
+                          << " size=" << chunks[i].size() << "\n";
+            }
+
+            return 0;
+        }
+        // end of DEBUG MODE
+
         if (argc != 4) {
             std::cerr << "usage:\n";
             std::cerr << "  dfs put <local_path> <remote_path>\n";
             std::cerr << "  dfs get <remote_path> <local_path>\n";
+            std::cerr << "  dfs split <local_path>\n"; // 👈 dodajemy do helpa
             return 1;
         }
 
