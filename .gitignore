@@ -1,7 +1,13 @@
-build/
-data/
-*.log
+# build
+/build/
+
+# binaries
+*.bin
+
+# test files
+out*.txt
+input*.txt
 test.txt
-out.txt
-big.bin
-out.bin
+
+# logs
+*.log
