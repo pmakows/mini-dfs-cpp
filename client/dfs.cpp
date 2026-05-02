@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 using json = nlohmann::json;
 
@@ -36,36 +37,65 @@ void write_file(const std::string& path, const std::string& data) {
     out.write(data.data(), data.size());
 }
 
-void put_file(const std::string& local_path, const std::string& remote_path) {
-    std::string data = read_file(local_path);
+std::vector<std::string> split_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("cannot open file: " + path);
+    }
 
-    // Na razie jeden blok. Chunking zrobimy w M4.
-    std::string block_id = "block_" + std::to_string(std::hash<std::string>{}(remote_path));
+    std::vector<std::string> chunks;
+
+    while (!in.eof()) {
+        std::string buffer(CHUNK_SIZE, '\0');
+        in.read(buffer.data(), CHUNK_SIZE);
+        size_t bytes_read = in.gcount();
+
+        if (bytes_read > 0) {
+            buffer.resize(bytes_read);
+            chunks.push_back(buffer);
+        }
+    }
+
+    return chunks;
+}
+
+void put_file(const std::string& local_path, const std::string& remote_path) {
+    auto chunks = split_file(local_path);
 
     httplib::Client storage(STORAGE_HOST, STORAGE_PORT);
+    httplib::Client metadata(METADATA_HOST, METADATA_PORT);
 
-    auto storage_res = storage.Put(
-        ("/block/" + block_id).c_str(),
-        data,
-        "application/octet-stream"
-    );
+    json blocks = json::array();
 
-    if (!storage_res || storage_res->status != 200) {
-        throw std::runtime_error("failed to store block");
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        std::string block_id =
+            "block_" + std::to_string(std::hash<std::string>{}(remote_path + std::to_string(i)));
+
+        auto storage_res = storage.Put(
+            ("/block/" + block_id).c_str(),
+            chunks[i],
+            "application/octet-stream"
+        );
+
+        if (!storage_res || storage_res->status != 200) {
+            throw std::runtime_error("failed to store block: " + block_id);
+        }
+
+        blocks.push_back({
+            {"id", block_id},
+            {"nodes", json::array({"storage1:8080"})},
+            {"size", chunks[i].size()}
+        });
+
+        std::cout << "Stored chunk " << i
+                  << " id=" << block_id
+                  << " size=" << chunks[i].size() << "\n";
     }
 
     json metadata_json = {
         {"path", remote_path},
-        {"blocks", json::array({
-            {
-                {"id", block_id},
-                {"nodes", json::array({"storage1:8080"})},
-                {"size", data.size()}
-            }
-        })}
+        {"blocks", blocks}
     };
-
-    httplib::Client metadata(METADATA_HOST, METADATA_PORT);
 
     auto metadata_res = metadata.Post(
         "/files",
@@ -77,7 +107,8 @@ void put_file(const std::string& local_path, const std::string& remote_path) {
         throw std::runtime_error("failed to store metadata");
     }
 
-    std::cout << "PUT OK: " << local_path << " -> " << remote_path << "\n";
+    std::cout << "PUT OK: " << local_path << " -> " << remote_path
+              << " (" << chunks.size() << " blocks)\n";
 }
 
 void get_file(const std::string& remote_path, const std::string& local_path) {
@@ -106,32 +137,8 @@ void get_file(const std::string& remote_path, const std::string& local_path) {
     std::cout << "GET OK: " << remote_path << " -> " << local_path << "\n";
 }
 
-std::vector<std::string> split_file(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        throw std::runtime_error("cannot open file");
-    }
-
-    std::vector<std::string> chunks;
-
-    while (!in.eof()) {
-        std::string buffer(CHUNK_SIZE, '\0');
-
-        in.read(buffer.data(), CHUNK_SIZE);
-        size_t bytes_read = in.gcount();
-
-        if (bytes_read > 0) {
-            buffer.resize(bytes_read);
-            chunks.push_back(buffer);
-        }
-    }
-
-    return chunks;
-}
-
 int main(int argc, char** argv) {
     try {
-        // DEBUG MODE: split
         if (argc == 3 && std::string(argv[1]) == "split") {
             auto chunks = split_file(argv[2]);
 
@@ -144,13 +151,12 @@ int main(int argc, char** argv) {
 
             return 0;
         }
-        // end of DEBUG MODE
 
         if (argc != 4) {
             std::cerr << "usage:\n";
             std::cerr << "  dfs put <local_path> <remote_path>\n";
             std::cerr << "  dfs get <remote_path> <local_path>\n";
-            std::cerr << "  dfs split <local_path>\n"; // 👈 dodajemy do helpa
+            std::cerr << "  dfs split <local_path>\n";
             return 1;
         }
 
