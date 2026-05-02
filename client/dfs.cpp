@@ -11,30 +11,30 @@ using json = nlohmann::json;
 static const std::string METADATA_HOST = "localhost";
 static const int METADATA_PORT = 9000;
 
-static const std::string STORAGE_HOST = "localhost";
-static const int STORAGE_PORT = 9001;
-
 static const size_t CHUNK_SIZE = 64 * 1024;
+static const int REPLICATION = 2;
 
-std::string read_file(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        throw std::runtime_error("cannot open input file: " + path);
+static const std::vector<std::string> STORAGE_NODES = {
+    "localhost:9001",
+    "localhost:9002",
+    "localhost:9003"
+};
+
+struct NodeAddress {
+    std::string host;
+    int port;
+};
+
+NodeAddress parse_node(const std::string& node) {
+    auto pos = node.find(":");
+    if (pos == std::string::npos) {
+        throw std::runtime_error("invalid node address: " + node);
     }
 
-    return std::string(
-        std::istreambuf_iterator<char>(in),
-        std::istreambuf_iterator<char>()
-    );
-}
-
-void write_file(const std::string& path, const std::string& data) {
-    std::ofstream out(path, std::ios::binary);
-    if (!out) {
-        throw std::runtime_error("cannot open output file: " + path);
-    }
-
-    out.write(data.data(), data.size());
+    return {
+        node.substr(0, pos),
+        std::stoi(node.substr(pos + 1))
+    };
 }
 
 std::vector<std::string> split_file(const std::string& path) {
@@ -62,34 +62,47 @@ std::vector<std::string> split_file(const std::string& path) {
 void put_file(const std::string& local_path, const std::string& remote_path) {
     auto chunks = split_file(local_path);
 
-    httplib::Client storage(STORAGE_HOST, STORAGE_PORT);
     httplib::Client metadata(METADATA_HOST, METADATA_PORT);
-
     json blocks = json::array();
 
     for (size_t i = 0; i < chunks.size(); ++i) {
         std::string block_id =
             "block_" + std::to_string(std::hash<std::string>{}(remote_path + std::to_string(i)));
 
-        auto storage_res = storage.Put(
-            ("/block/" + block_id).c_str(),
-            chunks[i],
-            "application/octet-stream"
-        );
+        json nodes = json::array();
 
-        if (!storage_res || storage_res->status != 200) {
-            throw std::runtime_error("failed to store block: " + block_id);
+        for (int r = 0; r < REPLICATION; ++r) {
+            size_t node_index = (i + r) % STORAGE_NODES.size();
+            std::string node = STORAGE_NODES[node_index];
+
+            NodeAddress addr = parse_node(node);
+            httplib::Client storage(addr.host, addr.port);
+
+            auto storage_res = storage.Put(
+                ("/block/" + block_id).c_str(),
+                chunks[i],
+                "application/octet-stream"
+            );
+
+            if (storage_res && storage_res->status == 200) {
+                nodes.push_back(node);
+
+                std::cout << "Stored chunk " << i
+                          << " id=" << block_id
+                          << " size=" << chunks[i].size()
+                          << " on " << node << "\n";
+            }
+        }
+
+        if (nodes.empty()) {
+            throw std::runtime_error("failed to store block on any node: " + block_id);
         }
 
         blocks.push_back({
             {"id", block_id},
-            {"nodes", json::array({"storage1:8080"})},
+            {"nodes", nodes},
             {"size", chunks[i].size()}
         });
-
-        std::cout << "Stored chunk " << i
-                  << " id=" << block_id
-                  << " size=" << chunks[i].size() << "\n";
     }
 
     json metadata_json = {
@@ -108,7 +121,8 @@ void put_file(const std::string& local_path, const std::string& remote_path) {
     }
 
     std::cout << "PUT OK: " << local_path << " -> " << remote_path
-              << " (" << chunks.size() << " blocks)\n";
+              << " (" << chunks.size() << " blocks, replication="
+              << REPLICATION << ")\n";
 }
 
 void get_file(const std::string& remote_path, const std::string& local_path) {
@@ -122,8 +136,6 @@ void get_file(const std::string& remote_path, const std::string& local_path) {
 
     json metadata_json = json::parse(metadata_res->body);
 
-    httplib::Client storage(STORAGE_HOST, STORAGE_PORT);
-
     std::ofstream out(local_path, std::ios::binary);
     if (!out) {
         throw std::runtime_error("cannot open output file: " + local_path);
@@ -131,17 +143,33 @@ void get_file(const std::string& remote_path, const std::string& local_path) {
 
     for (auto& block : metadata_json["blocks"]) {
         std::string block_id = block["id"];
+        bool fetched = false;
 
-        auto storage_res = storage.Get(("/block/" + block_id).c_str());
+        for (auto& node_json : block["nodes"]) {
+            std::string node = node_json;
 
-        if (!storage_res || storage_res->status != 200) {
-            throw std::runtime_error("failed to get block: " + block_id);
+            NodeAddress addr = parse_node(node);
+            httplib::Client storage(addr.host, addr.port);
+
+            auto storage_res = storage.Get(("/block/" + block_id).c_str());
+
+            if (storage_res && storage_res->status == 200) {
+                out.write(storage_res->body.data(), storage_res->body.size());
+                fetched = true;
+
+                std::cout << "Fetched block " << block_id
+                          << " from " << node
+                          << " size=" << storage_res->body.size() << "\n";
+                break;
+            }
+
+            std::cout << "Failed to fetch block " << block_id
+                      << " from " << node << "\n";
         }
 
-        out.write(storage_res->body.data(), storage_res->body.size());
-
-        std::cout << "Fetched block " << block_id
-                  << " size=" << storage_res->body.size() << "\n";
+        if (!fetched) {
+            throw std::runtime_error("failed to fetch block from all replicas: " + block_id);
+        }
     }
 
     std::cout << "GET OK: " << remote_path << " -> " << local_path << "\n";

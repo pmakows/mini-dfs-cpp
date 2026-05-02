@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   metadata:
     build: .
@@ -17,6 +15,24 @@ services:
     volumes:
       - storage1_data:/data
 
+  storage2:
+    build: .
+    command: ./storage_node
+    ports:
+      - "9002:8080"
+    volumes:
+      - storage2_data:/data
+
+  storage3:
+    build: .
+    command: ./storage_node
+    ports:
+      - "9003:8080"
+    volumes:
+      - storage3_data:/data
+
 volumes:
   metadata_data:
   storage1_data:
+  storage2_data:
+  storage3_data:
