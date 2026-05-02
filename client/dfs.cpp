@@ -122,17 +122,27 @@ void get_file(const std::string& remote_path, const std::string& local_path) {
 
     json metadata_json = json::parse(metadata_res->body);
 
-    std::string block_id = metadata_json["blocks"][0]["id"];
-
     httplib::Client storage(STORAGE_HOST, STORAGE_PORT);
 
-    auto storage_res = storage.Get(("/block/" + block_id).c_str());
-
-    if (!storage_res || storage_res->status != 200) {
-        throw std::runtime_error("failed to get block");
+    std::ofstream out(local_path, std::ios::binary);
+    if (!out) {
+        throw std::runtime_error("cannot open output file: " + local_path);
     }
 
-    write_file(local_path, storage_res->body);
+    for (auto& block : metadata_json["blocks"]) {
+        std::string block_id = block["id"];
+
+        auto storage_res = storage.Get(("/block/" + block_id).c_str());
+
+        if (!storage_res || storage_res->status != 200) {
+            throw std::runtime_error("failed to get block: " + block_id);
+        }
+
+        out.write(storage_res->body.data(), storage_res->body.size());
+
+        std::cout << "Fetched block " << block_id
+                  << " size=" << storage_res->body.size() << "\n";
+    }
 
     std::cout << "GET OK: " << remote_path << " -> " << local_path << "\n";
 }
