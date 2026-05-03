@@ -21,6 +21,7 @@ add_executable(cache_node
     cache_node/main.cpp
     cache_node/cache.c
     cache_node/cache_stats.c
+    cache_node/cache_analyzer.c
 )
 
 target_include_directories(storage_node PRIVATE

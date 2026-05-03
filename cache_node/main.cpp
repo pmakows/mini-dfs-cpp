@@ -1,5 +1,6 @@
 #include "cache.h"
 #include "cache_stats.h"
+#include "cache_analyzer.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -114,11 +115,29 @@ static void handle_client(int client_fd) {
         strcat(json, "\n");
 
         send_response(client_fd, 200, "OK", "application/json", json, strlen(json));
+
+    } else if (strcmp(method, "GET") == 0 && strcmp(path, "/analyze") == 0) {
+        cache_analyzer_report_t report = cache_analyze(&cache.stats);
+
+        char json[RESPONSE_BUFFER_SIZE];
+
+        snprintf(
+            json,
+            sizeof(json),
+            "{ \"status\": \"%s\", \"message\": \"%s\", \"hit_rate\": %.3f }\n",
+            report.status,
+            report.message,
+            report.hit_rate
+        );
+
+        send_response(client_fd, 200, "OK", "application/json", json, strlen(json));
+
     } else if (strcmp(method, "POST") == 0 && strcmp(path, "/reset-stats") == 0) {
         cache_reset_stats(&cache);
 
         const char *body = "{\"status\":\"reset\"}\n";
         send_response(client_fd, 200, "OK", "application/json", body, strlen(body));
+
     } else if (strncmp(path, "/cache/", 7) == 0) {
         const char *key = path + 7;
 
