@@ -10,11 +10,15 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <mutex>
+#include <thread>
+
 #define DEFAULT_PORT 9100
 #define REQUEST_BUFFER_SIZE 16384
 #define RESPONSE_BUFFER_SIZE 8192
 
 static cache_t cache;
+static std::mutex cache_mutex;
 
 static int get_port(void) {
     const char *env_port = getenv("CACHE_PORT");
@@ -108,16 +112,26 @@ static void handle_client(int client_fd) {
     if (strcmp(method, "GET") == 0 && strcmp(path, "/health") == 0) {
         const char *body = "OK\n";
         send_response(client_fd, 200, "OK", "text/plain", body, strlen(body));
+
     } else if (strcmp(method, "GET") == 0 && strcmp(path, "/stats") == 0) {
         char json[RESPONSE_BUFFER_SIZE];
 
-        cache_stats_to_json(&cache.stats, json, sizeof(json));
+        {
+            std::lock_guard<std::mutex> lock(cache_mutex);
+            cache_stats_to_json(&cache.stats, json, sizeof(json));
+        }
+
         strcat(json, "\n");
 
         send_response(client_fd, 200, "OK", "application/json", json, strlen(json));
 
     } else if (strcmp(method, "GET") == 0 && strcmp(path, "/analyze") == 0) {
-        cache_analyzer_report_t report = cache_analyze(&cache.stats);
+        cache_analyzer_report_t report;
+
+        {
+            std::lock_guard<std::mutex> lock(cache_mutex);
+            report = cache_analyze(&cache.stats);
+        }
 
         char json[RESPONSE_BUFFER_SIZE];
 
@@ -133,7 +147,10 @@ static void handle_client(int client_fd) {
         send_response(client_fd, 200, "OK", "application/json", json, strlen(json));
 
     } else if (strcmp(method, "POST") == 0 && strcmp(path, "/reset-stats") == 0) {
-        cache_reset_stats(&cache);
+        {
+            std::lock_guard<std::mutex> lock(cache_mutex);
+            cache_reset_stats(&cache);
+        }
 
         const char *body = "{\"status\":\"reset\"}\n";
         send_response(client_fd, 200, "OK", "application/json", body, strlen(body));
@@ -159,46 +176,63 @@ static void handle_client(int client_fd) {
                     return;
                 }
 
-                cache_put(&cache, key, body, body_len);
-                cache.stats.puts++;
+                {
+                    std::lock_guard<std::mutex> lock(cache_mutex);
+                    cache_put(&cache, key, body, body_len);
+                    cache.stats.puts++;
+                }
 
                 const char *response = "OK\n";
                 send_response(client_fd, 200, "OK", "text/plain", response, strlen(response));
             }
+
         } else if (strcmp(method, "GET") == 0) {
             char value[CACHE_VALUE_SIZE];
             size_t value_len = 0;
+            int found = 0;
 
-            int found = cache_get(
-                &cache,
-                key,
-                value,
-                sizeof(value),
-                &value_len
-            );
+            {
+                std::lock_guard<std::mutex> lock(cache_mutex);
 
-            cache.stats.gets++;
+                found = cache_get(
+                    &cache,
+                    key,
+                    value,
+                    sizeof(value),
+                    &value_len
+                );
+
+                cache.stats.gets++;
+
+                if (found) {
+                    cache.stats.hits++;
+                } else {
+                    cache.stats.misses++;
+                }
+            }
 
             if (!found) {
-                cache.stats.misses++;
-
                 const char *response = "MISS\n";
                 send_response(client_fd, 404, "Not Found", "text/plain", response, strlen(response));
             } else {
-                cache.stats.hits++;
-
                 send_response(client_fd, 200, "OK", "application/octet-stream", value, value_len);
             }
+
         } else if (strcmp(method, "DELETE") == 0) {
-            cache_invalidate(&cache, key);
-            cache.stats.invalidations++;
+            {
+                std::lock_guard<std::mutex> lock(cache_mutex);
+                cache_invalidate(&cache, key);
+                cache.stats.invalidations++;
+            }
 
             const char *response = "DELETED\n";
             send_response(client_fd, 200, "OK", "text/plain", response, strlen(response));
+
         } else {
             const char *response = "METHOD NOT ALLOWED\n";
             send_response(client_fd, 405, "Method Not Allowed", "text/plain", response, strlen(response));
         }
+
     } else {
         const char *body = "NOT FOUND\n";
         send_response(client_fd, 404, "Not Found", "text/plain", body, strlen(body));
@@ -256,7 +290,7 @@ int main(void) {
             continue;
         }
 
-        handle_client(client_fd);
+        std::thread(handle_client, client_fd).detach();
     }
 
     close(server_fd);

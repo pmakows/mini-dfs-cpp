@@ -6,24 +6,21 @@ run_test() {
     local script="$2"
 
     echo
-    echo "============================================================"
+    echo "=================================================="
     echo "RUNNING: $name"
     echo "SCRIPT : $script"
-    echo "============================================================"
-    echo
+    echo "=================================================="
 
     "$script"
 
     echo
     echo "PASSED : $name"
-    echo "============================================================"
-
-    echo
+    echo "=================================================="
     echo
 }
 
 echo
-echo "==================== DFS SMOKE TEST SUITE ===================="
+echo "================ DFS SMOKE TEST SUITE ================="
 echo
 
 run_test "CACHE" "./scripts/test_cache.sh"
@@ -33,6 +30,8 @@ run_test "CACHE UPDATE" "./scripts/test_cache_update.sh"
 run_test "CACHE KEY ISOLATION" "./scripts/test_cache_key_isolation.sh"
 run_test "CACHE SIZE LIMIT" "./scripts/test_cache_size_limit.sh"
 run_test "ANALYZER" "./scripts/test_cache_analyzer.sh"
+run_test "CACHE CONCURRENT" "./scripts/test_cache_concurrent.sh"
+run_test "CACHE CONCURRENT LOAD" "./scripts/test_cache_concurrent_load.sh"
 run_test "STORAGE" "./scripts/test_storage.sh"
 run_test "METADATA" "./scripts/test_metadata.sh"
 run_test "SPLIT" "./scripts/test_split.sh"
@@ -42,5 +41,5 @@ run_test "SMALL FILE CACHE HIT" "./scripts/test_small_file.sh"
 run_test "LARGE FILE" "./scripts/test_large_file.sh"
 
 echo
-echo "==================== ALL TESTS PASSED ========================"
+echo "================ ALL TESTS PASSED ================="
 echo

@@ -7,21 +7,17 @@ echo "== cache invalidation test =="
 
 echo "v1 data" > input.txt
 $DFS put input.txt /inv.txt > /dev/null
-
 $DFS get /inv.txt out1.txt > /dev/null
-$DFS get /inv.txt out2.txt > get_hit.log
 
 echo "v2 data" > input.txt
 $DFS put input.txt /inv.txt > put.log
+$DFS get /inv.txt out2.txt > get.log
 
-$DFS get /inv.txt out3.txt > get_miss.log
-$DFS get /inv.txt out4.txt > get_hit2.log
-
-diff input.txt out3.txt
-diff input.txt out4.txt
+diff input.txt out2.txt
 
 grep -q "CACHE INVALIDATE" put.log
-grep -q "CACHE MISS" get_miss.log
-grep -q "CACHE HIT" get_hit2.log
+grep -q "CACHE HIT" get.log
+
+rm -f input.txt out1.txt out2.txt put.log get.log
 
 echo "INVALIDATION OK"

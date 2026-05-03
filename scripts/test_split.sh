@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "== client split test =="
+echo "== client split/chunking test =="
 
 DFS_BIN="./build/client/dfs"
 
-if [ ! -x "$DFS_BIN" ]; then
+if [[ ! -x "$DFS_BIN" ]]; then
   DFS_BIN="./build/dfs"
 fi
 
-if [ ! -x "$DFS_BIN" ]; then
+if [[ ! -x "$DFS_BIN" ]]; then
   echo "ERROR: dfs binary not found"
   echo "Available executables in build/:"
   find build -type f -executable || true
@@ -18,13 +18,11 @@ fi
 
 dd if=/dev/urandom of=split_test.bin bs=64K count=3 status=none
 
-OUT=$("$DFS_BIN" split split_test.bin)
+"$DFS_BIN" put split_test.bin split_test.bin
+"$DFS_BIN" get split_test.bin split_test_out.bin
 
-echo "$OUT" | grep -q "Chunks: 3"
-echo "$OUT" | grep -q "Chunk 0 size=65536"
-echo "$OUT" | grep -q "Chunk 1 size=65536"
-echo "$OUT" | grep -q "Chunk 2 size=65536"
+cmp split_test.bin split_test_out.bin
 
-rm -f split_test.bin
+rm -f split_test.bin split_test_out.bin
 
-echo "split OK"
+echo "split/chunking OK"

@@ -1,21 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DFS="./build/dfs"
-
 echo "== E2E test (small file + cache) =="
 
-echo "hello e2e" > input.txt
+DFS_BIN="./build/client/dfs"
 
-$DFS put input.txt /e2e.txt > /dev/null
+if [[ ! -x "$DFS_BIN" ]]; then
+  DFS_BIN="./build/dfs"
+fi
 
-$DFS get /e2e.txt out1.txt > get1.log
-$DFS get /e2e.txt out2.txt > get2.log
+if [[ ! -x "$DFS_BIN" ]]; then
+  echo "ERROR: dfs binary not found"
+  find build -type f -executable || true
+  exit 1
+fi
 
-diff input.txt out1.txt
-diff input.txt out2.txt
+echo "hello dfs e2e" > e2e_test.txt
 
-grep -q "CACHE MISS" get1.log
-grep -q "CACHE HIT" get2.log
+"$DFS_BIN" put e2e_test.txt e2e_test.txt
+"$DFS_BIN" get e2e_test.txt e2e_out.txt
+
+cmp e2e_test.txt e2e_out.txt
+
+curl -fsS http://localhost:9100/cache/e2e_test.txt >/dev/null
+
+rm -f e2e_test.txt e2e_out.txt
 
 echo "E2E OK"

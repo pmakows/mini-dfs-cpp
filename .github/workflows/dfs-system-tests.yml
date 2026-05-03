@@ -1,0 +1,77 @@
+name: DFS system tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+concurrency:
+  group: dfs-system-tests
+  cancel-in-progress: false
+
+jobs:
+  system-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ wrk python3
+
+      - name: Build project
+        run: |
+          cmake -B build -S .
+          cmake --build build
+
+      - name: Start DFS services
+        run: |
+          docker compose up -d --build
+          docker compose ps
+          sleep 5
+
+      - name: Smoke test (small file)
+        run: |
+          echo "hello dfs world" > test.txt
+          ./build/dfs put test.txt test.txt
+          ./build/dfs get test.txt out.txt
+          cmp test.txt out.txt
+
+      - name: Resilience test (kill one storage node)
+        run: |
+          docker compose stop storage1
+          ./build/dfs get test.txt out_after_kill.txt
+          cmp test.txt out_after_kill.txt
+
+      - name: Large file replication test
+        run: |
+          dd if=/dev/urandom of=big.bin bs=1024 count=200
+          ./build/dfs put big.bin big.bin
+          ./build/dfs get big.bin big_out.bin
+          cmp big.bin big_out.bin
+
+      - name: wrk benchmark (storage node)
+        run: |
+          BLOCK_ID=$(curl -s http://localhost:9000/files/big.bin | python3 -c "import sys,json; print(json.load(sys.stdin)['blocks'][0]['id'])")
+          echo "Benchmarking block: $BLOCK_ID"
+          wrk -t2 -c10 -d10s http://localhost:9002/block/$BLOCK_ID
+
+      - name: wrk benchmark (cache node)
+        run: |
+          echo "cache test payload" > cache.txt
+          ./build/dfs put cache.txt cache.txt
+          wrk -t2 -c10 -d10s http://localhost:9100/cache/cache.txt
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail=200
+
+      - name: Shutdown services
+        if: always()
+        run: |
+          docker compose down
