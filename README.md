@@ -88,13 +88,14 @@ On every push and pull request the system is built, Docker services are started,
 
 ## Project evolution
 
-M1: single storage node  
-M2: HTTP API  
-M3: multiple storage nodes  
-M4: data distribution (hashing)  
-M5: DFS client  
-M6: cache layer  
-M7: CI, tests and Docker orchestration  
+M1: single storage node
+M2: HTTP API
+M3: multiple storage nodes
+M4: data distribution (hashing)
+M5: DFS client
+M6: cache layer
+M7: CI, tests and Docker orchestration
+M8: cache observability (stats API and workload-based testing)
 
 ## Design notes
 
@@ -104,7 +105,5 @@ M7: CI, tests and Docker orchestration
 - Tests are split into HTTP-based integration tests and CLI-based client logic tests
 
 ## Planned future work
-- M8: multi-node cache (sharding across cache nodes)
-- M9: cache eviction policies (LRU / TTL)
-- M10: data replication in storage layer
-- M11: basic fault tolerance (read fallback across replicas)
+M9: AI-based cache analysis and adaptive behavior
+M10: multi-node cache (sharding across cache nodes)
