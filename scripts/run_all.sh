@@ -23,6 +23,10 @@ echo "==================== DFS SMOKE TEST SUITE ===================="
 
 run_test "CACHE" ./scripts/test_cache.sh
 run_test "CACHE_STATS" ./scripts/test_cache_stats.sh
+run_test "CACHE_TTL" ./scripts/test_cache_ttl.sh
+run_test "CACHE_UPDATE" ./scripts/test_cache_update.sh
+run_test "CACHE_KEY_ISOLATION" ./scripts/test_cache_key_isolation.sh
+run_test "CACHE_SIZE_LIMIT" ./scripts/test_cache_size_limit.sh
 run_test "STORAGE" ./scripts/test_storage.sh
 run_test "METADATA" ./scripts/test_metadata.sh
 run_test "SPLIT" ./scripts/test_split.sh

@@ -47,6 +47,8 @@ void cache_put(
 
 void cache_invalidate(cache_t *cache, const char *key);
 
+unsigned long cache_hash(const char *str);
+
 void cache_reset_stats(cache_t *cache);
 
 #ifdef __cplusplus

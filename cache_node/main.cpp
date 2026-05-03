@@ -66,6 +66,22 @@ static char *find_body(char *request) {
     return body + 4;
 }
 
+static size_t get_content_length(const char *request) {
+    const char *header = strstr(request, "Content-Length:");
+
+    if (header == NULL) {
+        return 0;
+    }
+
+    header += strlen("Content-Length:");
+
+    while (*header == ' ') {
+        header++;
+    }
+
+    return (size_t)strtoull(header, NULL, 10);
+}
+
 static void handle_client(int client_fd) {
     char request[REQUEST_BUFFER_SIZE];
 
@@ -91,40 +107,46 @@ static void handle_client(int client_fd) {
     if (strcmp(method, "GET") == 0 && strcmp(path, "/health") == 0) {
         const char *body = "OK\n";
         send_response(client_fd, 200, "OK", "text/plain", body, strlen(body));
-    }
-    else if (strcmp(method, "GET") == 0 && strcmp(path, "/stats") == 0) {
+    } else if (strcmp(method, "GET") == 0 && strcmp(path, "/stats") == 0) {
         char json[RESPONSE_BUFFER_SIZE];
 
         cache_stats_to_json(&cache.stats, json, sizeof(json));
         strcat(json, "\n");
 
         send_response(client_fd, 200, "OK", "application/json", json, strlen(json));
-    }
-    else if (strcmp(method, "GET") == 0 && strcmp(path, "/reset-stats") == 0) {
+    } else if (strcmp(method, "POST") == 0 && strcmp(path, "/reset-stats") == 0) {
         cache_reset_stats(&cache);
 
-        const char *body = "{\"status\":\"reset\"}";
+        const char *body = "{\"status\":\"reset\"}\n";
         send_response(client_fd, 200, "OK", "application/json", body, strlen(body));
-    }
-    else if (strncmp(path, "/cache/", 7) == 0) {
+    } else if (strncmp(path, "/cache/", 7) == 0) {
         const char *key = path + 7;
 
         if (strcmp(method, "PUT") == 0) {
+            size_t content_length = get_content_length(request);
             char *body = find_body(request);
 
             if (body == NULL) {
                 const char *response = "BAD REQUEST\n";
                 send_response(client_fd, 400, "Bad Request", "text/plain", response, strlen(response));
             } else {
-                size_t body_len = (size_t)(received - (body - request));
+                size_t available_body_len = (size_t)(received - (body - request));
+                size_t body_len = content_length;
+
+                if (body_len == 0 || body_len > available_body_len) {
+                    const char *response = "BAD REQUEST\n";
+                    send_response(client_fd, 400, "Bad Request", "text/plain", response, strlen(response));
+                    close(client_fd);
+                    return;
+                }
 
                 cache_put(&cache, key, body, body_len);
+                cache.stats.puts++;
 
                 const char *response = "OK\n";
                 send_response(client_fd, 200, "OK", "text/plain", response, strlen(response));
             }
-        }
-        else if (strcmp(method, "GET") == 0) {
+        } else if (strcmp(method, "GET") == 0) {
             char value[CACHE_VALUE_SIZE];
             size_t value_len = 0;
 
@@ -136,25 +158,29 @@ static void handle_client(int client_fd) {
                 &value_len
             );
 
+            cache.stats.gets++;
+
             if (!found) {
+                cache.stats.misses++;
+
                 const char *response = "MISS\n";
                 send_response(client_fd, 404, "Not Found", "text/plain", response, strlen(response));
             } else {
+                cache.stats.hits++;
+
                 send_response(client_fd, 200, "OK", "application/octet-stream", value, value_len);
             }
-        }
-        else if (strcmp(method, "DELETE") == 0) {
+        } else if (strcmp(method, "DELETE") == 0) {
             cache_invalidate(&cache, key);
+            cache.stats.invalidations++;
 
             const char *response = "DELETED\n";
             send_response(client_fd, 200, "OK", "text/plain", response, strlen(response));
-        }
-        else {
+        } else {
             const char *response = "METHOD NOT ALLOWED\n";
             send_response(client_fd, 405, "Method Not Allowed", "text/plain", response, strlen(response));
         }
-    }
-    else {
+    } else {
         const char *body = "NOT FOUND\n";
         send_response(client_fd, 404, "Not Found", "text/plain", body, strlen(body));
     }
@@ -175,7 +201,6 @@ int main(void) {
     }
 
     int opt = 1;
-
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
         perror("setsockopt");
         close(server_fd);
