@@ -11,3 +11,12 @@ test.txt
 
 # logs
 *.log
+
+# build
+build/
+
+# logs / local test outputs
+*.log
+*.txt
+*.bin
+tests/tmp/
