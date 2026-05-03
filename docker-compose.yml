@@ -1,7 +1,7 @@
 services:
   metadata:
     build: .
-    command: ./metadata_service
+    command: ./metadata_node
     ports:
       - "9000:8080"
     volumes:
