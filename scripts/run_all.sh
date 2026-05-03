@@ -3,26 +3,25 @@ set -euo pipefail
 
 echo "== RUNNING ALL TESTS =="
 
-echo
+echo "[CACHE]"
 ./scripts/test_cache.sh
 
-echo
+echo "[STORAGE]"
 ./scripts/test_storage.sh
 
-echo
+echo "[METADATA]"
 ./scripts/test_metadata.sh
 
-echo
+echo "[SPLIT]"
 ./scripts/test_split.sh
 
-echo
+echo "[E2E]"
 ./scripts/test_e2e.sh
 
-echo
+echo "[INVALIDATION]"
 ./scripts/test_invalidation.sh
 
-echo
+echo "[LARGE FILE]"
 ./scripts/test_large_file.sh
 
-echo
 echo "ALL TESTS PASSED"
