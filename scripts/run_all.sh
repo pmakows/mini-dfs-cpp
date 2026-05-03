@@ -21,6 +21,9 @@ echo "[E2E]"
 echo "[INVALIDATION]"
 ./scripts/test_invalidation.sh
 
+echo "[SMALL FILE]"
+./scripts/test_small_file.sh
+
 echo "[LARGE FILE]"
 ./scripts/test_large_file.sh
 
