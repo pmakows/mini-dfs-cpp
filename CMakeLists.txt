@@ -9,8 +9,8 @@ add_executable(storage_node
     storage_node/main.cpp
 )
 
-add_executable(metadata_service
-    metadata_service/main.cpp
+add_executable(metadata_node
+    metadata_node/main.cpp
 )
 
 add_executable(dfs
@@ -18,15 +18,16 @@ add_executable(dfs
 )
 
 add_executable(cache_node
-    cache/main.cpp
-    cache/cache.c
+    cache_node/main.cpp
+    cache_node/cache.c
+    cache_node/cache_stats.c
 )
 
 target_include_directories(storage_node PRIVATE
     third_party
 )
 
-target_include_directories(metadata_service PRIVATE
+target_include_directories(metadata_node PRIVATE
     third_party
 )
 
@@ -35,6 +36,5 @@ target_include_directories(dfs PRIVATE
 )
 
 target_include_directories(cache_node PRIVATE
-    third_party
-    cache
+    cache_node
 )
