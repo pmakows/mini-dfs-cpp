@@ -1,30 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "== RUNNING ALL TESTS =="
+run_test() {
+  local name="$1"
+  local script="$2"
 
-echo "[CACHE]"
-./scripts/test_cache.sh
+  echo
+  echo "============================================================"
+  echo " RUNNING: $name"
+  echo " SCRIPT : $script"
+  echo "============================================================"
 
-echo "[STORAGE]"
-./scripts/test_storage.sh
+  "$script"
 
-echo "[METADATA]"
-./scripts/test_metadata.sh
+  echo "------------------------------------------------------------"
+  echo " PASSED : $name"
+  echo "------------------------------------------------------------"
+}
 
-echo "[SPLIT]"
-./scripts/test_split.sh
+echo
+echo "==================== DFS SMOKE TEST SUITE ===================="
 
-echo "[E2E]"
-./scripts/test_e2e.sh
+run_test "CACHE" ./scripts/test_cache.sh
+run_test "STORAGE" ./scripts/test_storage.sh
+run_test "METADATA" ./scripts/test_metadata.sh
+run_test "SPLIT" ./scripts/test_split.sh
+run_test "E2E" ./scripts/test_e2e.sh
+run_test "INVALIDATION" ./scripts/test_invalidation.sh
+run_test "SMALL FILE CACHE HIT" ./scripts/test_small_file.sh
+run_test "LARGE FILE" ./scripts/test_large_file.sh
 
-echo "[INVALIDATION]"
-./scripts/test_invalidation.sh
-
-echo "[SMALL FILE]"
-./scripts/test_small_file.sh
-
-echo "[LARGE FILE]"
-./scripts/test_large_file.sh
-
-echo "ALL TESTS PASSED"
+echo
+echo "==================== ALL TESTS PASSED ===================="

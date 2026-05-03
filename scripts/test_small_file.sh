@@ -1,19 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "== small file test (cache hit expected) =="
+echo "== small file test (CACHE HIT expected) =="
 
-# zapis małego pliku (wejdzie do cache)
-curl -s -X PUT localhost:9000/block/small-test --data-binary "hello" > /dev/null
+KEY="small-file-test"
+CACHE_URL="http://localhost:9100/cache/$KEY"
 
-# pierwszy GET → MISS
-OUT1=$(curl -s localhost:9000/block/small-test)
+echo "[SMALL FILE] cleanup old key"
+curl -fsS -X DELETE "$CACHE_URL" > /dev/null || true
 
-# drugi GET → HIT
-OUT2=$(curl -s localhost:9000/block/small-test)
+echo "[SMALL FILE] PUT key=$KEY value=hello-small"
+curl -fsS -X PUT "$CACHE_URL" --data-binary "hello-small" > /dev/null
 
-# sprawdzenie danych
-echo "$OUT1" | grep -q "hello"
-echo "$OUT2" | grep -q "hello"
+echo "[SMALL FILE] GET #1"
+OUT1=$(curl -fsS "$CACHE_URL")
+echo "[SMALL FILE] OUT1=$OUT1"
 
-echo "small file OK (cache hit verified)"
+echo "[SMALL FILE] GET #2"
+OUT2=$(curl -fsS "$CACHE_URL")
+echo "[SMALL FILE] OUT2=$OUT2"
+
+echo "$OUT1" | grep -q "hello-small"
+echo "$OUT2" | grep -q "hello-small"
+
+echo "[SMALL FILE] verifying CACHE HIT in cache-node logs"
+docker compose logs cache-node | grep "\[CACHE HIT\] key=$KEY"
+
+echo "[SMALL FILE] CACHE HIT verified for key=$KEY"
+
+curl -fsS -X DELETE "$CACHE_URL" > /dev/null
+
+echo "small file OK"
