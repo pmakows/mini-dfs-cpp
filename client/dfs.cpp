@@ -20,6 +20,8 @@ static const int CACHE_PORT = 9100;
 static const size_t CHUNK_SIZE = 64 * 1024;
 static const int REPLICATION = 2;
 
+static const size_t CACHE_MAX_OBJECT_SIZE = 4 * 1024;
+
 static const std::vector<std::string> STORAGE_NODES = {
     "localhost:9001",
     "localhost:9002",
@@ -27,12 +29,8 @@ static const std::vector<std::string> STORAGE_NODES = {
 };
 
 static std::string normalize_remote_path(std::string path) {
-    if (path.empty()) {
-        return "/";
-    }
-    if (path[0] != '/') {
-        path = "/" + path;
-    }
+    if (path.empty()) return "/";
+    if (path[0] != '/') path = "/" + path;
     return path;
 }
 
@@ -45,9 +43,7 @@ static std::string strip_leading_slash(std::string path) {
 
 static bool read_file(const std::string& path, std::string& out) {
     std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        return false;
-    }
+    if (!file) return false;
 
     std::ostringstream ss;
     ss << file.rdbuf();
@@ -57,9 +53,7 @@ static bool read_file(const std::string& path, std::string& out) {
 
 static bool write_file(const std::string& path, const std::string& data) {
     std::ofstream file(path, std::ios::binary);
-    if (!file) {
-        return false;
-    }
+    if (!file) return false;
 
     file.write(data.data(), static_cast<std::streamsize>(data.size()));
     return true;
@@ -87,19 +81,32 @@ static bool cache_get(const std::string& remote_path, std::string& data) {
     return false;
 }
 
-static void cache_put(const std::string& remote_path, const std::string& data) {
+static bool cache_put(const std::string& remote_path, const std::string& data) {
     httplib::Client cache(CACHE_HOST, CACHE_PORT);
 
     std::string key = strip_leading_slash(remote_path);
+
     auto res = cache.Put(
         ("/cache/" + key).c_str(),
         data,
-        "application/octet-stream"
+        "text/plain"
     );
 
     if (res && res->status == 200) {
         std::cout << "[CLIENT] CACHE STORE: " << key << std::endl;
+        return true;
     }
+
+    if (res) {
+        std::cerr << "[CLIENT] CACHE STORE FAILED: "
+                  << key << " status=" << res->status
+                  << " body=" << res->body << std::endl;
+    } else {
+        std::cerr << "[CLIENT] CACHE STORE FAILED: "
+                  << key << " no response from cache node" << std::endl;
+    }
+
+    return false;
 }
 
 static void cache_delete(const std::string& remote_path) {
@@ -186,9 +193,7 @@ static bool put_file(const std::string& local_path, const std::string& remote_pa
         offset += current_size;
         block_index++;
 
-        if (data.empty()) {
-            break;
-        }
+        if (data.empty()) break;
     }
 
     httplib::Client metadata_client(METADATA_HOST, METADATA_PORT);
@@ -204,10 +209,6 @@ static bool put_file(const std::string& local_path, const std::string& remote_pa
     }
 
     cache_delete(remote_path);
-
-    if (data.size() <= CHUNK_SIZE) {
-        cache_put(remote_path, data);
-    }
 
     std::cout << "PUT OK: " << local_path
               << " -> " << strip_leading_slash(remote_path)
@@ -284,7 +285,7 @@ static bool get_file(const std::string& remote_path_raw, const std::string& loca
         return false;
     }
 
-    if (output.size() <= CHUNK_SIZE) {
+    if (output.size() <= CACHE_MAX_OBJECT_SIZE) {
         cache_put(remote_path, output);
     }
 
